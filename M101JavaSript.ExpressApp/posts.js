@@ -28,15 +28,14 @@ function PostsDAO(db) {
                 "comments": [],
                 "date": new Date()}
 
+        // now insert the post
         posts.insert(post, function (err, result) {
             "use strict";
-            
-            if (!err) {
-                console.log("Inserted new post");
-                return callback(null, result[0]['permalink']);
-            }
-            
-            return callback(err, null);
+
+            if (err) return callback(err, null);
+
+            console.log("Inserted new post");
+            callback(err, permalink);
         });
     }
 
@@ -75,6 +74,21 @@ function PostsDAO(db) {
 
             if (err) return callback(err, null);
 
+            // XXX: Look here for final exam to see where we store "num_likes"
+
+            // fix up likes values. set to zero if data is not present
+            if (typeof post.comments === 'undefined') {
+                post.comments = [];
+            }
+
+            // Each comment document in a post should have a "num_likes" entry, so we have to
+            // iterate all the comments in the post to make sure that is the case
+            for (var i = 0; i < post.comments.length; i++) {
+                if (typeof post.comments[i].num_likes === 'undefined') {
+                    post.comments[i].num_likes = 0;
+                }
+                post.comments[i].comment_ordinal = i;
+            }
             callback(err, post);
         });
     }
@@ -88,21 +102,32 @@ function PostsDAO(db) {
             comment['email'] = email
         }
 
-        posts.findOne({ 'permalink': permalink }, function (err, post) {
+        posts.update({'permalink': permalink}, {'$push': {'comments': comment}}, function(err, numModified) {
+            "use strict";
+
+            if (err) return callback(err, null);
+
+            callback(err, numModified);
+        });
+    }
+
+    this.incrementLikes = function(permalink, comment_ordinal, callback) {
+        "use strict";
+
+        var selector = {};
+        var comment_ordinal = 0;
+        selector['comments.' + comment_ordinal + '.num_likes'] = 1; // equivalent to selector = { 'comments.0.num_likes' : 1 }
+        
+        // Following is illegal in JavaScript
+        // posts.update({ 'permalink': permalink }, { '$inc': { 'comments.' + comment_ordinal + '.num_likes' : 1 } }, function (err, numModified) {
+        posts.update({ 'permalink': permalink }, { '$inc': selector }, function (err, numModified) {
             "use strict";
             
             if (err) return callback(err, null);
             
-            post.comments.push(comment);
-            
-            posts.update({ 'permalink': permalink }, post, function (err, updated) {
-                if (err) throw err;
-                
-                console.dir("Successfully updated " + updated + " document!");
-                
-                callback(err, updated[0]);
-            });
+            callback(err, numModified);
         });
+        //callback(Error("incrementLikes NYI"), null);
     }
 }
 
